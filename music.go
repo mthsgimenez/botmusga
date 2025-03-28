@@ -2,11 +2,9 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
 	"log"
-	"os"
+        "io"
 	"os/exec"
 	"time"
 
@@ -48,15 +46,11 @@ func playMusic(e *events.MessageCreate, url string) {
 		log.Println("Error setting voice flag: ", err)
 	}
 
-	r, w := io.Pipe()
-	// "buffer" for ffmpeg output, so when ffmpeg finishes we can still write remaining packets
-	br, bw := io.Pipe()
-
-	ytdlpCmd := exec.Command("yt-dlp", "-f", "bestaudio", url, "-o", "-")
-	ytdlpCmd.Stdout = w
-
-	cmd := exec.Command("ffmpeg", "-nostdin", "-threads", "1", "-i", "-", "-c:a", "libopus", "-ac", "2", "-ar", "48000", "-f", "ogg", "-b:a", "96K", "-vbr", "off", "pipe:1")
-	cmd.Stdin = r
+	cmd := exec.Command("yt-dlp", "-f", "bestaudio",
+                "--quiet", "--no-progress", "--no-warnings",
+                url,
+                "--exec", "ffmpeg -i {} -threads 1 -c:a libopus -ac 2 -ar 48000 -b:a 96K -vbr off -f ogg - && rm {}",
+	)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -66,41 +60,15 @@ func playMusic(e *events.MessageCreate, url string) {
 
 	err = cmd.Start()
 	if err != nil {
-		log.Println("Error starting ffmpeg: ", err)
-                conn.Close(context.TODO())
+		log.Println("Error starting yt-dlp: ", err)
+		conn.Close(context.TODO())
 		return
 	}
-
-	err = ytdlpCmd.Start()
-	if err != nil {
-		log.Println("Error starting yt-dlp: ", err)
-                conn.Close(context.TODO())
-                return
-	}
-
-	go func() {
-		defer bw.Close()
-		if _, err := io.Copy(bw, stdout); err != nil && !errors.Is(err, os.ErrClosed) {
-			log.Println("Error copying ffmpeg output: ", err)
-		}
-	}()
-
-	go func() {
-		ytdlpCmd.Wait()
-		log.Println("yt-dlp finished")
-		// If we don't manually close the writer, ffmpeg never finishes
-		w.Close()
-	}()
-
-	go func() {
-		cmd.Wait()
-		log.Println("ffmpeg finished")
-	}()
 
 	ticker := time.NewTicker(time.Millisecond * 20)
 	defer ticker.Stop()
 
-	decoder := NewDecoder(br)
+	decoder := NewDecoder(stdout)
 
 	for range ticker.C {
 		packet, err := decoder.GetPacket()
