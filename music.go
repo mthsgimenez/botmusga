@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"io"
 	"log"
-        "io"
 	"os/exec"
 	"time"
 
@@ -12,14 +11,6 @@ import (
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/disgo/voice"
 )
-
-type UserNotInVoiceChannel struct {
-	Message string
-}
-
-func (e *UserNotInVoiceChannel) Error() string {
-	return fmt.Sprintln("Couldn't get channelID:", e.Message)
-}
 
 func playMusic(e *events.MessageCreate, url string) {
 	state, connected := e.Client().Caches().VoiceState(*e.GuildID, e.Message.Author.ID)
@@ -47,9 +38,9 @@ func playMusic(e *events.MessageCreate, url string) {
 	}
 
 	cmd := exec.Command("yt-dlp", "-f", "bestaudio",
-                "--quiet", "--no-progress", "--no-warnings",
-                url,
-                "--exec", "ffmpeg -i {} -threads 1 -c:a libopus -ac 2 -ar 48000 -b:a 96K -vbr off -f ogg - && rm {}",
+		"--quiet", "--no-progress", "--no-warnings",
+		url,
+		"--exec", "ffmpeg -i {} -threads 1 -c:a libopus -ac 2 -ar 48000 -b:a 96K -vbr off -f ogg - && rm {}",
 	)
 
 	stdout, err := cmd.StdoutPipe()
